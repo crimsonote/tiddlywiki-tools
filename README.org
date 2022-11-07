@@ -1,0 +1,96 @@
+* 总述
+这个存储库存放一些有关这边tiddlywiki自定义的一些小工具。(不过目前就一个就是了)
+
+** html-split-tid.sh
+
+*** 概述
+这是一个计划用于拆分epub的脚本，可以根据html的 ~<h[1-6]>~ 标签把epub拆分为数个写做tid读作html的文件。
+
+主要是为了便于将epub文本内容导入tiddlywiki并使用[[https://tiddlymemo.org/][钓鱼插件]]进行渐进阅读的时候，可以利用[[https://tiddlywiki.com/static/LazyLoading.html][懒加载]]机制延迟加载，以加快网页加载速度。
+
+可能有更好的解决方法，不过这边不太了解。另外，这个脚本没太多防呆设计，如果需要使用，请不要输入太奇怪的参数。
+
+*** 依赖
+这是一个shell脚本，要正常工作需要调用很多外部程序。
+
+不过，一般linux系统没有预装的主要就是 =pandoc= 和 =htmlq= 。其他的 =tr sed grep mktemp cat cut mkdir= 一般linux操作系统都有预装吧……？ 
+
+*** 用法
+**** epub转html片段
+pandoc并非这个脚本的直接依赖，不过，其输入需要这个命令的预处理。
+
+手动执行
+#+begin_src bash
+pandoc 待转换的epub文件.epub -o 导出的html片段文件.html --embed-resources
+#+end_src
+这个命令，以把epub转换为html片段,并将其中的图片以base64格式嵌入到输出html中。
+**** 调用脚本
+这个脚本的语法为
+: bash html-split-tid.sh 导出的html片段文件.html 书名 "标签"
+第一个参数需要是一个不包含html、head、body的html的片段格式。也就是上面那个转换命令的输出。
+
+=书名= 参数用于决定导出的tid文件的标题前缀、索引用页面(目录)名称。不能留空。(不过没有防呆检查)
+
+而 =标签= 参数可以留空，如果不留空，则会为索引用页面添加这个标签(序列)。
+
+执行后会在当前文件夹下生成以下文件
+
++ file-list.log :: 按目录顺序排序的文件序列，便于按目录顺序导入
++ [书名].tid :: 索引页面，目录记录指向其他文件的连接，额外的，索引页面会带有 *书籍渐进阅读* 标签。
++ [章节标题].html :: 正文。把每个章节拆成一个个小文件。出于避免重名的考虑，正文部分的title字段会添加%[书名]/作为前缀(虽然可能没必要)。
+**** 用你喜欢的方式导入……大概
+执行
+=cat file-list.log|xargs -i -n 1 tiddlywiki wiki所在目录 --import {} application/x-tiddler=
+
+这个命令，以把各个文件导入到wiki目录中。
+**** 自定义延迟加载
+(此步骤建议在导入前完成，不然加载时会很卡)
+
+在tiddlywiki中打开 =$:/core= ，然后选择 *contents* 列出这个插件(?)所有的文件。找到 =$:/core/save/lazy-images= (可以使用浏览器的Ctrl+f的页面搜索快速跳转)并打开。
+
+然后找到类似于下面的部分
+
+#+begin_example
+\define skinnySaveTiddlerFilter()
+[!is[system]is[image]]
+\end
+#+end_example
+
+改成
+
+#+begin_example
+\define skinnySaveTiddlerFilter()
+[!is[system]is[image]] [!is[system]tag[书籍渐进阅读]tagging[]]
+\end
+#+end_example
+
+或者也可以说，在这里添加一个 =[!is[system]tag[书籍渐进阅读]tagging[]]= 这样的，能够列出所有具有"书籍渐进阅读"这个标签的页面的子页面的筛选器，以阻止这些页面的内容被立即加载。
+
+如果你使用的是TidGi,现在就已经设置完成了，因为TidGi默认启用了该懒加载策略以延迟加载图像类资源。(虽然太记可能也不需要这种东西吧……？毕竟桌面端程序，启动时间长一点影响也不大……？)
+
+如果你使用的是标准tiddlywiki的nodejs版本，在启动命令中增加 =root-tiddler=$:/core/save/lazy-images= 变成
+
+: tiddlywiki --listen root-tiddler=$:/core/save/lazy-diy2 port=3001 host=0.0.0.0
+
+即可启用该懒加载设置。然后刷新浏览器即可。
+
+*** 和TWPUB的比较
+这个脚本只是一个html文件的拆分工具，并且很多地方都很糟糕。
+
+比如说，没有足够的防呆，以及标签树生成存在bug(然后砍掉了)，代码……自己看不出什么问题，不过估计很差劲。
+
+不能直接将图片导入tiddlywiki,而只能依赖于pandoc将图片以base64的方式嵌入html，这导致如果有图片需要复用，那么在html中每个用到这个图片的地方都会完整存储一份图片。并且，base64编码对存储空间的占用可能本身就比较大。
+
+仅仅只是将html标签原样当作tid格式的文本塞进tiddlywiki里，而没有更细致的格式转化。
+
+不过，和TWPUB相比，自认为还是好很多的吧……？ 虽然说钓鱼插件原生支持TWPUB +毕竟这边至少没有往存储库塞几百M的二进制文件(epub电子书)污染存储库+
+
+TWPUB工具会将一本epub的书转换成一个TWPUB的json，但是同样还是单一文件。将TWPUB导入wiki后，wiki会将导入的这个twpub电子书视为一个插件。但是，一个网站，即使别的什么都不加载，刚打开就先加载三四十MB的电子书文件，也会卡很久吧……因此，TWPUB会很大幅度的拖慢wiki加载的速度。
+
+并且作为单一文件的"插件"很难配置延迟加载。(虽然也不是不行，不过很麻烦，而且想要重新加载这个twpub插件也很麻烦)
+
+这个脚本则能够把epub拆分为很多相对较小的页面，配置延迟加载后，每次只需要加载需要的页面。而且不需要开始加载时全部加载上去。
+
+虽然说懒加载会导致一些插件和正文搜索功能在尝试读取或编辑未加载内容时无法正常检索，不过对于这些素材来说，大概也并不需要经常修改和搜索……？
+
+嗯，大体上就这样吧……？

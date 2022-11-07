@@ -1,0 +1,11 @@
+*~
+*#*
+*.log
+*.tmp
+blog
+*/.gitignore
+.stignore
+ExternalFile
+**/ltx*
+**/tmp*
+*.sync-*.*
